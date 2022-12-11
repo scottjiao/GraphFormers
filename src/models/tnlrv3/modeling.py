@@ -9,7 +9,7 @@ from torch import nn
 from torch.nn.modules.loss import _Loss
 import torch.nn.functional as F
 
-from transformers.modeling_bert import \
+from transformers.models.bert.modeling_bert import \
     BertPreTrainedModel, BertSelfOutput, BertIntermediate, \
     BertOutput, BertPredictionHeadTransform, BertPooler
 from transformers.file_utils import WEIGHTS_NAME

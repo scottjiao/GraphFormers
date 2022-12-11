@@ -19,7 +19,7 @@ def parse_args():
 
     parser.add_argument("--savename", type=str, default='GraphFormers')
     parser.add_argument("--world_size", type=int, default=8)
-    parser.add_argument("--token_length", type=int, default=32)
+    parser.add_argument("--token_length", type=int, default=16)
     parser.add_argument("--neighbor_num", type=int, default=5)
 
     # model training

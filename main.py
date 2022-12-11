@@ -10,15 +10,16 @@ from src.utils import setuplogging
 if __name__ == "__main__":
 
     setuplogging()
-    gpus = ','.join([str(_ + 1) for _ in range(2)])
+    gpus = ','.join([str(_ ) for _ in range(1)])
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
+    os.environ['MASTER_PORT'] = '12356'
     args = parse_args()
     print(os.getcwd())
     args.log_steps = 5
-    args.world_size = 2  # GPU number
+    args.world_size = 1  # GPU number
     args.mode = 'train'
+    args.profile = "True"
     Path(args.model_dir).mkdir(parents=True, exist_ok=True)
 
     cont = False

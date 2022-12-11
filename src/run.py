@@ -3,7 +3,7 @@ import os
 import random
 import time
 from collections import defaultdict
-
+from torch.profiler import profile, record_function, ProfilerActivity
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -13,8 +13,26 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from src.data_handler import DatasetForMatching, DataCollatorForMatching, SingleProcessDataLoader, \
     MultiProcessDataLoader
 from src.models.tnlrv3.configuration_tnlrv3 import TuringNLRv3Config
+import tensorboard
 
 
+class blank_profile():
+    def __init__(self,*args,**kwargs):
+        pass
+    def __enter__(self,*args,**kwargs):
+        return self
+    def __exit__(self,*args,**kwargs):
+        pass
+    def step(self):
+        pass
+
+
+def trace_handler(p):
+    output = p.key_averages().table(sort_by="self_cuda_time_total", row_limit=10)
+    print(output)
+    p.export_chrome_trace("/tmp/trace_" + str(p.step_num) + ".json")
+
+    
 def setup(rank, args):
     # initialize the process group
     dist.init_process_group("nccl", rank=rank, world_size=args.world_size)
@@ -46,7 +64,7 @@ def load_bert(args):
 
 def train(local_rank, args, end, load):
     try:
-        if local_rank == 0:
+        if local_rank == 0 and args.world_size > 1:
             from src.utils import setuplogging
             setuplogging()
         os.environ["RANK"] = str(local_rank)
@@ -75,79 +93,115 @@ def train(local_rank, args, end, load):
         loss = 0.0
         global_step = 0
         best_acc, best_count = 0.0, 0
-        for ep in range(args.epochs):
-            start_time = time.time()
-            ddp_model.train()
-            dataset = DatasetForMatching(file_path=args.train_data_path)
-            if args.world_size > 1:
-                end.value = False
-                dataloader = MultiProcessDataLoader(dataset,
-                                                    batch_size=args.train_batch_size,
-                                                    collate_fn=data_collator,
-                                                    local_rank=local_rank,
-                                                    world_size=args.world_size,
-                                                    global_end=end)
-            else:
-                dataloader = SingleProcessDataLoader(dataset, batch_size=args.train_batch_size,
-                                                     collate_fn=data_collator, blocking=True)
-            for step, batch in enumerate(dataloader):
-                if args.enable_gpu:
-                    for k, v in batch.items():
-                        if v is not None:
-                            batch[k] = v.cuda(non_blocking=True)
+        
+        start_structured_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        
+        if args.profile=="True":
+            profile_func=profile
+        elif args.profile=="False":
+            profile_func=blank_profile
+        with profile_func(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            profile_memory=True,
+            record_shapes=True,
+            schedule=torch.profiler.schedule(
+                wait=2,
+                warmup=2,
+                active=6,
+                repeat=1),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(f"./tmp/trace{start_structured_time}")
+        ) as p:
 
-                if args.fp16:
-                    with autocast():
-                        batch_loss = ddp_model(**batch)
+
+            for ep in range(args.epochs):
+                start_time = time.time()
+                ddp_model.train()
+                dataset = DatasetForMatching(file_path=args.train_data_path)
+                if args.world_size > 1:
+                    end.value = False
+                    dataloader = MultiProcessDataLoader(dataset,
+                                                        batch_size=args.train_batch_size,
+                                                        collate_fn=data_collator,
+                                                        local_rank=local_rank,
+                                                        world_size=args.world_size,
+                                                        global_end=end)
                 else:
-                    batch_loss = ddp_model(**batch)
-                loss += batch_loss.item()
-                optimizer.zero_grad()
-                if args.fp16:
-                    scaler.scale(batch_loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    batch_loss.backward()
-                    optimizer.step()
+                    dataloader = SingleProcessDataLoader(dataset, batch_size=args.train_batch_size,
+                                                        collate_fn=data_collator, blocking=True)
+                local_step = 0
 
-                global_step += 1
+                data_time_start=    time.time()
 
-                if local_rank == 0 and global_step % args.log_steps == 0:
-                    logging.info(
-                        '[{}] cost_time:{} step:{}, lr:{}, train_loss: {:.5f}'.format(
-                            local_rank, time.time() - start_time, global_step, optimizer.param_groups[0]['lr'],
-                                        loss / args.log_steps))
-                    loss = 0.0
+                for step, batch in enumerate(dataloader):
+                    data_time_end = time.time()
+                    data_time = data_time_end - data_time_start
+                    
+                    with record_function("model_data_to_gpu"):
+                        if args.enable_gpu:
+                            for k, v in batch.items():
+                                if v is not None:
+                                    batch[k] = v.cuda(non_blocking=True)
+                    data_time_gpu_end = time.time()
+                    data_time_gpu = data_time_gpu_end - data_time_end
+                    with record_function("model_inference"):
+                        if args.fp16:
+                            with autocast():
+                                batch_loss = ddp_model(**batch)
+                        else:
+                            batch_loss = ddp_model(**batch)
 
-                dist.barrier()
-            logging.info("train time:{}".format(time.time() - start_time))
+                    p.step()
+                    with record_function("optimizer_step"):
+                        loss += batch_loss.item()
+                        optimizer.zero_grad()
+                        if args.fp16:
+                            scaler.scale(batch_loss).backward()
+                            scaler.step(optimizer)
+                            scaler.update()
+                        else:
+                            batch_loss.backward()
+                            optimizer.step()
+                        local_step += 1
+                        global_step += 1
 
-            if local_rank == 0:
-                ckpt_path = os.path.join(args.model_dir, '{}-epoch-{}.pt'.format(args.savename, ep + 1))
-                torch.save(model.state_dict(), ckpt_path)
-                logging.info(f"Model saved to {ckpt_path}")
+                    if local_rank == 0 and global_step % args.log_steps == 0:
+                        #logging.info(
+                        #    f"Epoch {ep}/{args.epochs} [{local_rank}] cost_time:{time.time() - start_time} step:{global_step}, lr:{optimizer.param_groups[0]['lr']}, train_loss: {loss / args.log_steps:.5f}")
+                        
+                        # print epoch, step, starting strctured time, now time, time used for this epoch, train loss
+                        logging.info(
+                            f"Ep:{ep} {step} start: { start_structured_time }| now: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}| meanBatchTime: {(time.time() - start_time)/local_step:.3f}s loss: {loss / args.log_steps:.3f} io: cpuData: {data_time*1000 :.1f}ms"
+                        )
+                        loss = 0.0
 
-                logging.info("Star validation for epoch-{}".format(ep + 1))
-                acc = test_single_process(model, args, "valid")
-                logging.info("validation time:{}".format(time.time() - start_time))
-                if acc > best_acc:
-                    ckpt_path = os.path.join(args.model_dir, '{}-best.pt'.format(args.savename))
+                    dist.barrier()
+                    data_time_start = time.time()
+                #logging.info(f"Epoch {ep}/{args.epochs} train time:{time.time() - start_time}")
+                if local_rank == 0:
+                    ckpt_path = os.path.join(args.model_dir, '{}-epoch-{}.pt'.format(args.savename, ep + 1))
                     torch.save(model.state_dict(), ckpt_path)
                     logging.info(f"Model saved to {ckpt_path}")
-                    best_acc = acc
-                    best_count = 0
-                else:
-                    best_count += 1
-                    if best_count >= 2:
-                        start_time = time.time()
+
+                    logging.info("Star validation for epoch-{}".format(ep + 1))
+                    acc = test_single_process(model, args, "valid")
+                    logging.info("validation time:{}".format(time.time() - start_time))
+                    if acc > best_acc:
                         ckpt_path = os.path.join(args.model_dir, '{}-best.pt'.format(args.savename))
-                        model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
-                        logging.info("Star testing for best")
-                        acc = test_single_process(model, args, "test")
-                        logging.info("test time:{}".format(time.time() - start_time))
-                        exit()
-            dist.barrier()
+                        torch.save(model.state_dict(), ckpt_path)
+                        logging.info(f"Model saved to {ckpt_path}")
+                        best_acc = acc
+                        best_count = 0
+                    else:
+                        best_count += 1
+                        if best_count >= 2:
+                            start_time = time.time()
+                            ckpt_path = os.path.join(args.model_dir, '{}-best.pt'.format(args.savename))
+                            model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
+                            logging.info("Star testing for best")
+                            acc = test_single_process(model, args, "test")
+                            logging.info("test time:{}".format(time.time() - start_time))
+                            exit()
+                dist.barrier()
 
         if local_rank == 0:
             start_time = time.time()

@@ -18,6 +18,7 @@ def str2bool(v):
 
 
 def setuplogging():
+    # how this works
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     handler = logging.StreamHandler(sys.stdout)
