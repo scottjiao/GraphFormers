@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import logging
 import torch.multiprocessing as mp
 
 from src.parameters import parse_args
@@ -10,18 +11,22 @@ from src.utils import setuplogging
 if __name__ == "__main__":
 
     setuplogging()
-    gpus = ','.join([str(_ ) for _ in range(1)])
+    gids=list(range(1))
+    gpus = ','.join([str(_ ) for _ in gids])
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12356'
     args = parse_args()
     print(os.getcwd())
     args.log_steps = 5
-    args.world_size = 1  # GPU number
+    args.world_size = len(gids)  # GPU number
     args.mode = 'train'
     args.profile = "True"
+    args.train_batch_size = 30
+    args.neighbor_num = 5
     Path(args.model_dir).mkdir(parents=True, exist_ok=True)
 
+    logging.info(args)
     cont = False
     if args.mode == 'train':
         print('-----------train------------')
@@ -34,7 +39,10 @@ if __name__ == "__main__":
                      nprocs=args.world_size,
                      join=True)
         else:
-            end = None
+            mp.freeze_support()
+            mgr = mp.Manager()
+            end = mgr.Value('b', False)
+            #end = None
             train(0, args, end, cont)
 
     if args.mode == 'test':

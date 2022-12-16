@@ -126,8 +126,14 @@ def train(local_rank, args, end, load):
                                                         world_size=args.world_size,
                                                         global_end=end)
                 else:
-                    dataloader = SingleProcessDataLoader(dataset, batch_size=args.train_batch_size,
-                                                        collate_fn=data_collator, blocking=True)
+                    """dataloader = SingleProcessDataLoader(dataset, batch_size=args.train_batch_size,
+                                                        collate_fn=data_collator, blocking=True)"""
+                    dataloader = MultiProcessDataLoader(dataset,
+                                                        batch_size=args.train_batch_size,
+                                                        collate_fn=data_collator,
+                                                        local_rank=local_rank,
+                                                        world_size=args.world_size,
+                                                        global_end=end)
                 local_step = 0
 
                 data_time_start=    time.time()
@@ -150,7 +156,6 @@ def train(local_rank, args, end, load):
                         else:
                             batch_loss = ddp_model(**batch)
 
-                    p.step()
                     with record_function("optimizer_step"):
                         loss += batch_loss.item()
                         optimizer.zero_grad()
@@ -164,6 +169,7 @@ def train(local_rank, args, end, load):
                         local_step += 1
                         global_step += 1
 
+                    p.step()
                     if local_rank == 0 and global_step % args.log_steps == 0:
                         #logging.info(
                         #    f"Epoch {ep}/{args.epochs} [{local_rank}] cost_time:{time.time() - start_time} step:{global_step}, lr:{optimizer.param_groups[0]['lr']}, train_loss: {loss / args.log_steps:.5f}")

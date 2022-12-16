@@ -48,7 +48,6 @@ def parse_args():
     parser.add_argument("--fp16", type=utils.str2bool, default=True)
 
     args = parser.parse_args()
-    logging.info(args)
     return args
 
 
