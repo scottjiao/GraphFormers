@@ -12,7 +12,8 @@ if __name__ == "__main__":
 
     setuplogging()
     gids=list(range(1))
-    gpus = ','.join([str(_ ) for _ in gids])
+    #gpus = ','.join([str(_ ) for _ in gids])
+    gpus = '1'
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12356'

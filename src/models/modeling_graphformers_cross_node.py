@@ -159,14 +159,10 @@ class GraphBertEncoder(nn.Module):
                 with record_function("graph_attention_in_layer"):
                     station_emb = self.graph_attention(hidden_states=cls_emb, attention_mask=node_mask,
                                                     rel_pos=node_rel_pos)  # B D
-                                                    # attention_mask: B*SN 1 1 L+1
-                                                    # node_mask: B 1 1 SN
-                                                    # node_rel_pos: B Head 1 SN
-                                                    # rel_pos: B*SN Head L+1 L+1
 
                 # update the station in the query/key
-                hidden_states[:, 0, 0] = station_emb # B D
-                hidden_states = hidden_states.view(all_nodes_num, seq_length, emb_dim) # B*SN L D
+                hidden_states[:, 0, 0] = station_emb
+                hidden_states = hidden_states.view(all_nodes_num, seq_length, emb_dim)
                 
                 with record_function("bert_in_layer"):
                     layer_outputs = layer_module(hidden_states, attention_mask=attention_mask, rel_pos=rel_pos)
@@ -213,8 +209,6 @@ class GraphFormers(TuringNLRv3PreTrainedModel):
                 attention_mask,
                 neighbor_mask=None):
         with record_function("preparation_before_graph_encoder"):
-            # input_ids: [B*N, L](all_nodes_num, seq_length)
-            # attention_mask: [B,N]
             all_nodes_num, seq_length = input_ids.shape
             batch_size, subgraph_node_num = neighbor_mask.shape
 
@@ -268,11 +262,11 @@ class GraphFormers(TuringNLRv3PreTrainedModel):
         
         with record_function("graph_encoder"):
             encoder_outputs = self.encoder(
-                embedding_output, # N*B, L+1, D
-                attention_mask=extended_attention_mask,  # N*B,1,1,1+L
-                node_mask=node_mask,   # B,1,1,N
-                node_rel_pos=node_rel_pos, # B, head_num, 1, N
-                rel_pos=rel_pos) # N*B, head_num, 1+L, 1+L
+                embedding_output,
+                attention_mask=extended_attention_mask,
+                node_mask=node_mask,
+                node_rel_pos=node_rel_pos,
+                rel_pos=rel_pos)
 
         return encoder_outputs
 
@@ -292,10 +286,7 @@ class GraphFormersForNeighborPredict(GraphTuringNLRPreTrainedModel):
             input_ids = input_ids_node_and_neighbors_batch.view(B * N, L)
             attention_mask = attention_mask_node_and_neighbors_batch.view(B * N, L)
         with record_function("compute_hidden_states"):
-            #input_ids: [B*N,L]
-            #attention_mask: [B*N,L]
-            #mask_node_and_neighbors_batch: [B,N]
-            # N is the size of neighbors/subgraph
+
             hidden_states = self.bert(input_ids, attention_mask, mask_node_and_neighbors_batch)
         with record_function("fetch_node_embeddings"):
 
@@ -334,7 +325,7 @@ class GraphFormersForNeighborPredict(GraphTuringNLRPreTrainedModel):
             "mrr": mrr,
             "ndcg": ndcg
         }
-
+    #no need to modify
     def forward(self, input_ids_query_and_neighbors_batch, attention_mask_query_and_neighbors_batch,
                 mask_query_and_neighbors_batch, \
                 input_ids_key_and_neighbors_batch, attention_mask_key_and_neighbors_batch, mask_key_and_neighbors_batch,
