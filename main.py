@@ -13,16 +13,18 @@ if __name__ == "__main__":
     setuplogging()
     gids=list(range(1))
     #gpus = ','.join([str(_ ) for _ in gids])
-    gpus = '1'
+    gpus = '0'
     os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12356'
+    os.environ['MASTER_PORT'] = '12357'
     args = parse_args()
     print(os.getcwd())
     args.log_steps = 5
     args.world_size = len(gids)  # GPU number
     args.mode = 'train'
-    args.profile = "True"
+    args.profile = "False"
+    #args.model_type="CrossNodeGraphFormers"
+    #args.model_type="GraphFormers"
     args.train_batch_size = 30
     args.neighbor_num = 5
     Path(args.model_dir).mkdir(parents=True, exist_ok=True)

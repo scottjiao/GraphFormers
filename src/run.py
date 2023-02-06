@@ -54,11 +54,19 @@ def load_bert(args):
     if args.model_type == "GraphFormers":
         from src.models.modeling_graphformers import GraphFormersForNeighborPredict
         model = GraphFormersForNeighborPredict(config)
-        model.load_state_dict(torch.load(args.model_name_or_path, map_location="cpu")['model_state_dict'], strict=False)
-        # model = GraphFormersForNeighborPredict.from_pretrained(args.model_name_or_path, config=config)
+    elif args.model_type == "GraphFormers_no_graph":
+        from src.models.modeling_graphformers_with_no_graph import GraphFormersForNeighborPredict
+        model = GraphFormersForNeighborPredict(config)
+    elif args.model_type == "GraphFormers_no_rel_pos":
+        from src.models.modeling_graphformers_with_no_rel_pos import GraphFormersForNeighborPredict
+        model = GraphFormersForNeighborPredict(config)
     elif args.model_type == "GraphSageMax":
         from src.models.modeling_graphsage import GraphSageMaxForNeighborPredict
         model = GraphSageMaxForNeighborPredict.from_pretrained(args.model_name_or_path, config=config)
+    elif args.model_type == "CrossNodeGraphFormers":
+        from src.models.modeling_graphformers_cross_node import GraphFormersForNeighborPredict
+        model = GraphFormersForNeighborPredict(config)
+        #model.load_state_dict(torch.load(args.model_name_or_path, map_location="cpu")['model_state_dict'], strict=False)
     return model
 
 
@@ -126,14 +134,14 @@ def train(local_rank, args, end, load):
                                                         world_size=args.world_size,
                                                         global_end=end)
                 else:
-                    """dataloader = SingleProcessDataLoader(dataset, batch_size=args.train_batch_size,
-                                                        collate_fn=data_collator, blocking=True)"""
-                    dataloader = MultiProcessDataLoader(dataset,
+                    dataloader = SingleProcessDataLoader(dataset, batch_size=args.train_batch_size,
+                                                        collate_fn=data_collator, blocking=True)
+                    """dataloader = MultiProcessDataLoader(dataset,
                                                         batch_size=args.train_batch_size,
                                                         collate_fn=data_collator,
                                                         local_rank=local_rank,
                                                         world_size=args.world_size,
-                                                        global_end=end)
+                                                        global_end=end)"""
                 local_step = 0
 
                 data_time_start=    time.time()

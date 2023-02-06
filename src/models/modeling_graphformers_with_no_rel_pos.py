@@ -200,7 +200,7 @@ class GraphBertEncoder(nn.Module):
                 cls_emb = hidden_states[:, :, 1].clone()  # B SN D
                 with record_function("graph_attention_in_layer"):
                     station_emb = self.graph_attention(hidden_states=cls_emb, attention_mask=node_mask,
-                                                    rel_pos=node_rel_pos)  # B D
+                                                    rel_pos=None)  # B D
                                                     # attention_mask: B*SN 1 1 L+1
                                                     # node_mask: B 1 1 SN
                                                     # node_rel_pos: B Head 1 SN
@@ -211,12 +211,12 @@ class GraphBertEncoder(nn.Module):
                 hidden_states = hidden_states.view(all_nodes_num, seq_length, emb_dim) # B*SN L D
                 
                 with record_function("bert_in_layer"):
-                    layer_outputs = layer_module(hidden_states, attention_mask=attention_mask, rel_pos=rel_pos)
+                    layer_outputs = layer_module(hidden_states, attention_mask=attention_mask, rel_pos=None)
 
             else:
                 temp_attention_mask = attention_mask.clone()
                 temp_attention_mask[::subgraph_node_num, :, :, 0] = -10000.0
-                layer_outputs = layer_module(hidden_states, attention_mask=temp_attention_mask, rel_pos=rel_pos)
+                layer_outputs = layer_module(hidden_states, attention_mask=temp_attention_mask, rel_pos=None)
 
             hidden_states = layer_outputs[0]
 
