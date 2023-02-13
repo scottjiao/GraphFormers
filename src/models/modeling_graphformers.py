@@ -112,9 +112,12 @@ class GraphAggregation(BertSelfAttention):
         self.output_attentions = False
 
     def forward(self, hidden_states, attention_mask=None, rel_pos=None):
-        query = self.query(hidden_states[:, :1])  # B 1 D  #only the center node is queried
-        key = self.key(hidden_states)
-        value = self.value(hidden_states)
+        with record_function("graph_bert_query"):
+            query = self.query(hidden_states[:, :1])  # B 1 D  #only the center node is queried
+        with record_function("graph_bert_key"):
+            key = self.key(hidden_states)
+        with record_function("graph_bert_value"):
+            value = self.value(hidden_states)
         station_embed = self.multi_head_attention(query=query,
                                                   key=key,
                                                   value=value,

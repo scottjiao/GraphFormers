@@ -7,6 +7,7 @@ import src.utils as utils
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, default="train", choices=['train', 'test'])
+    parser.add_argument("--profile", type=str, default="False", choices=['True', 'False'])
     parser.add_argument("--train_data_path", type=str, default="./data/dblp_graph_data/train.tsv", )
     parser.add_argument("--train_batch_size", type=int, default=30)
     parser.add_argument("--valid_data_path", type=str, default="./data/dblp_graph_data/valid.tsv")
@@ -16,10 +17,12 @@ def parse_args():
 
     parser.add_argument("--model_dir", type=str, default='./ckpt')  # path to save
     parser.add_argument("--enable_gpu", type=utils.str2bool, default=True)
+    parser.add_argument("--early_stopping_surpass_count", type=int, default=2)
+    
 
     parser.add_argument("--savename", type=str, default='GraphFormers')
     parser.add_argument("--world_size", type=int, default=8)
-    parser.add_argument("--token_length", type=int, default=16)
+    parser.add_argument("--token_length", type=int, default=32)
     parser.add_argument("--neighbor_num", type=int, default=5)
 
     # model training

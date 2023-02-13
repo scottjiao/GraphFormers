@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+from torch.profiler import profile, record_function, ProfilerActivity
 import logging
 import math
 import os
@@ -203,32 +204,39 @@ class BertSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def multi_head_attention(self, query, key, value, attention_mask, rel_pos):
-        query_layer = self.transpose_for_scores(query)
-        key_layer = self.transpose_for_scores(key)
-        value_layer = self.transpose_for_scores(value)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
-        if rel_pos is not None:
-            attention_scores = attention_scores + rel_pos
+        with record_function("graph_bert_inner_product"):
+            
+            query_layer = self.transpose_for_scores(query)
+            key_layer = self.transpose_for_scores(key)
+            value_layer = self.transpose_for_scores(value)
+            
+            # Take the dot product between "query" and "key" to get the raw attention scores.
+            attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+            attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+            if attention_mask is not None:
+                # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+                attention_scores = attention_scores + attention_mask
+            if rel_pos is not None:
+                attention_scores = attention_scores + rel_pos
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        
+        with record_function("graph_bert_softmax"):
+            attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-        context_layer = torch.matmul(attention_probs, value_layer)
+        
+        with record_function("graph_bert_aggregation"):
+            attention_probs = self.dropout(attention_probs)
+            context_layer = torch.matmul(attention_probs, value_layer)
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+            context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+            new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+            context_layer = context_layer.view(*new_context_layer_shape)
 
-        return (context_layer, attention_probs) if self.output_attentions else (context_layer,)
+            return (context_layer, attention_probs) if self.output_attentions else (context_layer,)
 
     def forward(self, hidden_states, attention_mask=None, 
                 encoder_hidden_states=None, 
@@ -297,13 +305,16 @@ class BertLayer(nn.Module):
         self.output = BertOutput(config)
 
     def forward(self, hidden_states, attention_mask=None, split_lengths=None, rel_pos=None):
-        self_attention_outputs = self.attention(
-            hidden_states, attention_mask, 
-            split_lengths=split_lengths, rel_pos=rel_pos)
-        attention_output = self_attention_outputs[0]
+        with record_function("bert_layer_attention"):
+            self_attention_outputs = self.attention(
+                hidden_states, attention_mask, 
+                split_lengths=split_lengths, rel_pos=rel_pos)
+            attention_output = self_attention_outputs[0]
 
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
+        with record_function("bert_layer_intermediate"):
+            intermediate_output = self.intermediate(attention_output)
+        with record_function("bert_layer_output"):
+            layer_output = self.output(intermediate_output, attention_output)
         outputs = (layer_output,) + self_attention_outputs[1:]
         return outputs
 

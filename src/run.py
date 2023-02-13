@@ -192,9 +192,9 @@ def train(local_rank, args, end, load):
                     data_time_start = time.time()
                 #logging.info(f"Epoch {ep}/{args.epochs} train time:{time.time() - start_time}")
                 if local_rank == 0:
-                    ckpt_path = os.path.join(args.model_dir, '{}-epoch-{}.pt'.format(args.savename, ep + 1))
-                    torch.save(model.state_dict(), ckpt_path)
-                    logging.info(f"Model saved to {ckpt_path}")
+                    #ckpt_path = os.path.join(args.model_dir, '{}-epoch-{}.pt'.format(args.savename, ep + 1))
+                    #torch.save(model.state_dict(), ckpt_path)
+                    #logging.info(f"Model saved to {ckpt_path}")
 
                     logging.info("Star validation for epoch-{}".format(ep + 1))
                     acc = test_single_process(model, args, "valid")
@@ -207,7 +207,7 @@ def train(local_rank, args, end, load):
                         best_count = 0
                     else:
                         best_count += 1
-                        if best_count >= 2:
+                        if best_count >= args.early_stopping_surpass_count:
                             start_time = time.time()
                             ckpt_path = os.path.join(args.model_dir, '{}-best.pt'.format(args.savename))
                             model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))

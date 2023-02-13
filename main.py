@@ -21,8 +21,8 @@ if __name__ == "__main__":
     print(os.getcwd())
     args.log_steps = 5
     args.world_size = len(gids)  # GPU number
-    args.mode = 'train'
-    args.profile = "False"
+    #args.mode = 'train'
+    #args.profile = "False"
     #args.model_type="CrossNodeGraphFormers"
     #args.model_type="GraphFormers"
     args.train_batch_size = 30
@@ -49,6 +49,6 @@ if __name__ == "__main__":
             train(0, args, end, cont)
 
     if args.mode == 'test':
-        args.load_ckpt_name = "/data/workspace/Share/junhan/TopoGram_ckpt/dblp/topogram-pretrain-finetune-dblp-best3.pt"
+        args.load_ckpt_name = "/data/zhou/graphformer/TuringModels/del/graphformers-dblp.pt"
         print('-------------test--------------')
         test(args)
