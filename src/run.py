@@ -207,7 +207,7 @@ def train(local_rank, args, end, load):
                         best_count = 0
                     else:
                         best_count += 1
-                        if best_count >= args.early_stopping_surpass_count:
+                        if best_count >= args.early_stop_duration:
                             start_time = time.time()
                             ckpt_path = os.path.join(args.model_dir, '{}-best.pt'.format(args.savename))
                             model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))

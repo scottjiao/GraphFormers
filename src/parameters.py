@@ -17,7 +17,7 @@ def parse_args():
 
     parser.add_argument("--model_dir", type=str, default='./ckpt')  # path to save
     parser.add_argument("--enable_gpu", type=utils.str2bool, default=True)
-    parser.add_argument("--early_stopping_surpass_count", type=int, default=2)
+    parser.add_argument("--early_stop_duration", type=int, default=2)
     
 
     parser.add_argument("--savename", type=str, default='GraphFormers')
