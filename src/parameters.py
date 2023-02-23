@@ -9,7 +9,7 @@ def parse_args():
     parser.add_argument("--mode", type=str, default="train", choices=['train', 'test'])
     parser.add_argument("--profile", type=str, default="False", choices=['True', 'False'])
     parser.add_argument("--train_data_path", type=str, default="./data/dblp_graph_data/train.tsv", )
-    parser.add_argument("--train_batch_size", type=int, default=30)
+    parser.add_argument("--train_batch_size", type=int, default=120)
     parser.add_argument("--valid_data_path", type=str, default="./data/dblp_graph_data/valid.tsv")
     parser.add_argument("--valid_batch_size", type=int, default=300)
     parser.add_argument("--test_data_path", type=str, default="./data/dblp_graph_data/test.tsv")
@@ -45,7 +45,7 @@ def parse_args():
         help="choose which ckpt to load and test"
     )
 
-    parser.add_argument("--lr", type=float, default=1e-5)
+    parser.add_argument("--lr", type=float, default=1e-6)   # 1e-5 for product, 1e-6 for dblp, 5e-6 for wiki
 
     # half float
     parser.add_argument("--fp16", type=utils.str2bool, default=True)
